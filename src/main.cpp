@@ -7,10 +7,10 @@
 // pin definitions
 static const int pinLED = LED_BUILTIN; // 13
 static const int AUDIO_TRIGGER_PIN = 12;
-static const int wtvResetPin = 2;  // The pin number of the reset pin.
-static const int wtvClockPin = 3;  // The pin number of the clock pin.
-static const int wtvDataPin = 4;  // The pin number of the data pin.
-static const int wtvBusyPin = 5;  // The pin number of the busy pin.
+static const int wtvClockPin = 11;  // The pin number of the clock pin.
+static const int wtvDataPin = 10;  // The pin number of the data pin.
+static const int wtvBusyPin = 9;  // The pin number of the busy pin.
+static const int wtvBusyCallbackPin = 8;  // The pin number of the busy pin.
 
 // state variables
 bool audioIsOn = false;
@@ -18,6 +18,7 @@ int selectedAudioFile = -1;
 
 // Debounced Input Buttons
 static InputDebounce audioTriggerButton;
+static InputDebounce audioBusyPin;
 
 // MP3 player module
 static WTV020SD16P wtv020sd16p(wtvClockPin, wtvDataPin, wtvBusyPin);
@@ -28,8 +29,8 @@ const bool audioLoop [] = {true, true, false};
 
 long getRandomAudioFile()
 {
-
-  return random(0, numAudioFiles);
+  return 0;
+  // return random(0, numAudioFiles);
 }
 
 void setSelectedAudioFile(int audioFile)
@@ -70,6 +71,14 @@ void debouncedButtonReleasedCallback(uint8_t pinIn)
     Serial.println(selectedAudioFile);
     Serial.print("Audio file loops? ");
     Serial.println((shouldAudioLoop()) ? "Yes" : "No");
+    if (audioIsOn)
+    {
+      wtv020sd16p.asyncPlayVoice(selectedAudioFile);
+    } else {
+      setSelectedAudioFile(-1);
+      audioIsOn = false;
+      wtv020sd16p.stopVoice();
+    }
   }
 }
 
@@ -100,13 +109,14 @@ void setup() {
   // init serial
   Serial.begin(9600);
 
-  Serial.println("Test InputDebounce library, using callback functions");
-
   // register callback functions (shared, used by all buttons)
   audioTriggerButton.registerCallbacks(debouncedButtonPressedCallback, debouncedButtonReleasedCallback, debouncedButtonPressedDurationCallback, debouncedButtonReleasedDurationCallback);
+  audioBusyPin.registerCallbacks(debouncedButtonPressedCallback, debouncedButtonReleasedCallback, debouncedButtonPressedDurationCallback, debouncedButtonReleasedDurationCallback);
 
   // setup input buttons (debounced)
   audioTriggerButton.setup(AUDIO_TRIGGER_PIN, BUTTON_DEBOUNCE_DELAY);
+  pinMode(wtvBusyCallbackPin, INPUT);
+  audioBusyPin.setup(wtvBusyCallbackPin, BUTTON_DEBOUNCE_DELAY, InputDebounce::PIM_EXT_PULL_DOWN_RES);
 
 }
 
@@ -115,7 +125,7 @@ void loop() {
 
     // poll button state
     audioTriggerButton.process(now);
-
+    audioBusyPin.process(now);
     delay(1); // [ms]
 
 }
