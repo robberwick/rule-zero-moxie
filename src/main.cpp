@@ -8,14 +8,13 @@
 // pin definitions
 static const int pinLED = LED_BUILTIN; // 13
 static const int AUDIO_TRIGGER_PIN = 12;
+static const int _AUDIO_BUSY_PIN = 9;
 
 // state variables
-bool audioIsOn = false;
 int selectedAudioFile = -1;
 
 // Debounced Input Buttons
 static InputDebounce audioTriggerButton;
-static InputDebounce audioBusyPin;
 
 // MP3 player module
 // audio file loopin
@@ -24,12 +23,11 @@ void printDetail(uint8_t type, int value);
 SoftwareSerial Serial1(10, 11); // RX, TXg array. using selectedAudioFile as an index, this array
 // determines whether or not the file should be looped
 const int numAudioFiles = 3;
-const bool audioLoop [] = {true, true, false};
+const bool audioLoop [] = {true, false, true};
 
 long getRandomAudioFile()
 {
-  return 1;
-  // return random(0, numAudioFiles);
+  return random(1, numAudioFiles + 1);
 }
 
 void setSelectedAudioFile(int audioFile)
@@ -39,7 +37,12 @@ void setSelectedAudioFile(int audioFile)
 
 bool shouldAudioLoop()
 {
-  return (selectedAudioFile > -1) ? audioLoop[selectedAudioFile] : false;
+  return (selectedAudioFile > 0) ? audioLoop[selectedAudioFile -1] : false;
+}
+
+bool audioIsPlaying()
+{
+  return !digitalRead(_AUDIO_BUSY_PIN);
 }
 
 void debouncedButtonPressedCallback(uint8_t pinIn)
@@ -60,22 +63,20 @@ void debouncedButtonReleasedCallback(uint8_t pinIn)
   Serial.println(")");
 
   if (pinIn == AUDIO_TRIGGER_PIN) {
-    audioIsOn = !audioIsOn;
-    Serial.print("Aduio is ON:");
-    Serial.println(audioIsOn);
     // If audio should play, choose a random file and set it as selected
     // else reset to -1
-    setSelectedAudioFile((audioIsOn) ? getRandomAudioFile() : -1);
-    Serial.print("Selected audio file: ");
-    Serial.println(selectedAudioFile);
-    Serial.print("Audio file loops? ");
-    Serial.println((shouldAudioLoop()) ? "Yes" : "No");
-    if (audioIsOn)
+    if (!audioIsPlaying())
     {
+      Serial.println("Playing audio");
+      setSelectedAudioFile(getRandomAudioFile());
+      Serial.print("Selected audio file: ");
+      Serial.println(selectedAudioFile);
+      Serial.print("Audio file loops? ");
+      Serial.println((shouldAudioLoop()) ? "Yes" : "No");
       myDFPlayer.play(selectedAudioFile);
     } else {
-      setSelectedAudioFile(-1);
-      audioIsOn = false;
+      Serial.println("Stopping audio");
+      setSelectedAudioFile(0);
       myDFPlayer.stop();
     }
   }
@@ -84,11 +85,11 @@ void debouncedButtonReleasedCallback(uint8_t pinIn)
 void debouncedButtonPressedDurationCallback(uint8_t pinIn, unsigned long duration)
 {
   // handle still pressed state
-  Serial.print("HIGH (pin: ");
-  Serial.print(pinIn);
-  Serial.print(") still pressed, duration ");
-  Serial.print(duration);
-  Serial.println("ms");
+  // Serial.print("HIGH (pin: ");
+  // Serial.print(pinIn);
+  // Serial.print(") still pressed, duration ");
+  // Serial.print(duration);
+  // Serial.println("ms");
 }
 
 void debouncedButtonReleasedDurationCallback(uint8_t pinIn, unsigned long duration)
@@ -190,7 +191,6 @@ void setup() {
 
   // register callback functions (shared, used by all buttons)
   audioTriggerButton.registerCallbacks(debouncedButtonPressedCallback, debouncedButtonReleasedCallback, debouncedButtonPressedDurationCallback, debouncedButtonReleasedDurationCallback);
-  audioBusyPin.registerCallbacks(debouncedButtonPressedCallback, debouncedButtonReleasedCallback, debouncedButtonPressedDurationCallback, debouncedButtonReleasedDurationCallback);
 
   // setup input buttons (debounced)
   audioTriggerButton.setup(AUDIO_TRIGGER_PIN, BUTTON_DEBOUNCE_DELAY);
@@ -202,11 +202,10 @@ void loop() {
 
     // poll button state
     audioTriggerButton.process(now);
-    audioBusyPin.process(now);
 
     if (myDFPlayer.available()) {
-    printDetail(myDFPlayer.readType(), myDFPlayer.read()); //Print the detail message from DFPlayer to handle different errors and states.
-  }
+      printDetail(myDFPlayer.readType(), myDFPlayer.read()); //Print the detail message from DFPlayer to handle different errors and states.
+    }
     delay(1); // [ms]
 
 }
