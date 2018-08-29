@@ -7,8 +7,9 @@
 #include <avr/power.h>
 #endif
 
+#define DEBUG
 #define BUTTON_DEBOUNCE_DELAY 20 // [ms]
-#define NUMPIXELS 3
+#define NUMPIXELS 8
 #define DATA_PIN 3
 #define LIGHT_FRAME_LENGTH 250 // [ms]
 #define MAX_LIGHT_FRAMES 2
@@ -74,6 +75,8 @@ void getNewLightFrame(long currentTime)
 
 void printDetail(uint8_t type, int value)
 {
+  // mark all these as debug prints for now
+  #ifdef DEBUG
   switch (type)
   {
   case TimeOut:
@@ -134,6 +137,7 @@ void printDetail(uint8_t type, int value)
   default:
     break;
   }
+  #endif
 }
 
 void updateLights(long currentTime)
@@ -142,18 +146,31 @@ void updateLights(long currentTime)
   {
     getNewLightFrame(currentTime);
   }
-
   if (currentLightFrame == 0)
   {
-    pixels.setPixelColor(0, pixels.Color(0, 0, 255));
-    pixels.setPixelColor(1, pixels.Color(0, 0, 0));
-    pixels.setPixelColor(2, pixels.Color(255, 165, 0));
+    for(int i = 0; i < 4; i++)
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 255));
+    }
+    for(int i = 5; i < 9; i++)
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+    }
+
   }
   else if (currentLightFrame == 1)
   {
-    pixels.setPixelColor(0, pixels.Color(0, 0, 0));
-    pixels.setPixelColor(1, pixels.Color(0, 0, 255));
-    pixels.setPixelColor(2, pixels.Color(255, 165, 0));
+    for(int i = 0; i < 4; i++)
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+    }
+    for(int i = 5; i < 9; i++)
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 255));
+    }
+
+    // // set all other neopixels orange
+    // pixels.setPixelColor(10, pixels.Color(255, 165, 0));
   }
   pixels.show();
 }
@@ -173,23 +190,30 @@ void setup()
 
   // init serial
   Serial1.begin(9600);
+
+  #ifdef DEBUG
   Serial.begin(115200);
 
   Serial.println();
   Serial.println(F("Initializing DFPlayer ... (May take 3~5 seconds)"));
+  #endif
 
   // Use softwareSerial to communicate with mp3.
   if (!myDFPlayer.begin(Serial1))
   {
+    #ifdef DEBUG
     Serial.println(F("Unable to begin:"));
     Serial.println(F("1.Please recheck the connection!"));
     Serial.println(F("2.Please insert the SD card!"));
+    #endif
     while (true)
     {
       delay(0); // Code to compatible with ESP8266 watch dog.
     }
   }
+  #ifdef DEBUG
   Serial.println(F("DFPlayer Mini online."));
+  #endif
 
   myDFPlayer.volume(30); //Set volume value. From 0 to 30
   // myDFPlayer.play(1);  //Play the first mp3
@@ -227,25 +251,28 @@ void loop()
       {
         if (!audioIsPlaying())
         {
-          Serial.println("Playing audio");
           setSelectedAudioFile(getRandomAudioFile());
+          myDFPlayer.play(selectedAudioFile);
+          #ifdef DEBUG
+          Serial.println("Playing audio");
           Serial.print("Selected audio file: ");
           Serial.println(selectedAudioFile);
           Serial.print("Audio file loops? ");
           Serial.println((shouldAudioLoop()) ? "Yes" : "No");
-          myDFPlayer.play(selectedAudioFile);
+          #endif
         }
         else
         {
-          Serial.println("Stopping audio");
           setSelectedAudioFile(0);
           myDFPlayer.stop();
+          #ifdef DEBUG
+          Serial.println("Stopping audio");
+          #endif
         }
       }
     }
   }
   lastAudioTriggerState = audioPinReading;
-
   if (myDFPlayer.available())
   {
     printDetail(myDFPlayer.readType(), myDFPlayer.read()); //Print the detail message from DFPlayer to handle different errors and states.
@@ -274,7 +301,9 @@ void loop()
       if (lightTriggerState == LOW)
       {
         lightsActive = !lightsActive;
+        #ifdef DEBUG
         Serial.println(lightsActive ? F("LIGHTS") : F("NO LIGHTS"));
+        #endif
         if (lightsActive)
         {
           // we've just activated the lights so initialise
