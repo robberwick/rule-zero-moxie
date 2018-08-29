@@ -2,19 +2,30 @@
 #include <SoftwareSerial.h>
 #include "InputDebounce.h"
 #include "DFRobotDFPlayerMini.h"
+#include <FastLED.h>
 
 #define BUTTON_DEBOUNCE_DELAY   20   // [ms]
+#define NUM_LEDS 3
+#define DATA_PIN 3
+#define LIGHT_FRAME_LENGTH 1000 // [ms]
+
+CRGBArray<NUM_LEDS> leds;
 
 // pin definitions
 static const int pinLED = LED_BUILTIN; // 13
 static const int AUDIO_TRIGGER_PIN = 12;
-static const int _AUDIO_BUSY_PIN = 9;
+static const int AUDIO_BUSY_PIN = 9;
+static const int LIGHT_TRIGGER_PIN = 6;
+
 
 // state variables
 int selectedAudioFile = -1;
+bool lightsActive = false;
+unsigned long lastLightChangeTime = 0;
 
 // Debounced Input Buttons
 static InputDebounce audioTriggerButton;
+static InputDebounce lightTriggerButton;
 
 // MP3 player module
 // audio file loopin
@@ -42,7 +53,11 @@ bool shouldAudioLoop()
 
 bool audioIsPlaying()
 {
-  return !digitalRead(_AUDIO_BUSY_PIN);
+  return !digitalRead(AUDIO_BUSY_PIN);
+}
+
+void startNewLightFrame() {
+  lastLightChangeTime = millis();
 }
 
 void debouncedButtonPressedCallback(uint8_t pinIn)
@@ -79,6 +94,16 @@ void debouncedButtonReleasedCallback(uint8_t pinIn)
       setSelectedAudioFile(0);
       myDFPlayer.stop();
     }
+  }
+
+  if (pinIn == LIGHT_TRIGGER_PIN) {
+    lightsActive = !lightsActive;
+    if (lightsActive) {
+      startNewLightFrame();
+    }
+    Serial.println(lightsActive ? F("LIGHTS!") : F("No lights.."));
+    leds[0] = CRGB::Red; 
+    FastLED.show();
   }
 }
 
@@ -169,31 +194,37 @@ void setup() {
   pinMode(pinLED, OUTPUT);
 
   // init serial
-  Serial1.begin(9600);
+  // Serial1.begin(9600);
   Serial.begin(115200);
   
-  Serial.println();
-  Serial.println(F("Initializing DFPlayer ... (May take 3~5 seconds)"));
+  // Serial.println();
+  // Serial.println(F("Initializing DFPlayer ... (May take 3~5 seconds)"));
   
   //Use softwareSerial to communicate with mp3.
-  if (!myDFPlayer.begin(Serial1)) {
-    Serial.println(F("Unable to begin:"));
-    Serial.println(F("1.Please recheck the connection!"));
-    Serial.println(F("2.Please insert the SD card!"));
-    while(true){
-      delay(0); // Code to compatible with ESP8266 watch dog.
-    }
-  }
-  Serial.println(F("DFPlayer Mini online."));
+  // if (!myDFPlayer.begin(Serial1)) {
+  //   Serial.println(F("Unable to begin:"));
+  //   Serial.println(F("1.Please recheck the connection!"));
+  //   Serial.println(F("2.Please insert the SD card!"));
+  //   while(true){
+  //     delay(0); // Code to compatible with ESP8266 watch dog.
+  //   }
+  // }
+  // Serial.println(F("DFPlayer Mini online."));
   
-  myDFPlayer.volume(30);  //Set volume value. From 0 to 30
+  // myDFPlayer.volume(30);  //Set volume value. From 0 to 30
   // myDFPlayer.play(1);  //Play the first mp3
 
   // register callback functions (shared, used by all buttons)
   audioTriggerButton.registerCallbacks(debouncedButtonPressedCallback, debouncedButtonReleasedCallback, debouncedButtonPressedDurationCallback, debouncedButtonReleasedDurationCallback);
+  lightTriggerButton.registerCallbacks(debouncedButtonPressedCallback, debouncedButtonReleasedCallback, debouncedButtonPressedDurationCallback, debouncedButtonReleasedDurationCallback);
 
   // setup input buttons (debounced)
   audioTriggerButton.setup(AUDIO_TRIGGER_PIN, BUTTON_DEBOUNCE_DELAY);
+  lightTriggerButton.setup(LIGHT_TRIGGER_PIN, BUTTON_DEBOUNCE_DELAY);
+
+  // initialise LEDS
+  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
+  FastLED.clear();
 
 }
 
@@ -202,10 +233,16 @@ void loop() {
 
     // poll button state
     audioTriggerButton.process(now);
+    lightTriggerButton.process(now);
 
-    if (myDFPlayer.available()) {
-      printDetail(myDFPlayer.readType(), myDFPlayer.read()); //Print the detail message from DFPlayer to handle different errors and states.
-    }
-    delay(1); // [ms]
+    // if (myDFPlayer.available()) {
+    //   printDetail(myDFPlayer.readType(), myDFPlayer.read()); //Print the detail message from DFPlayer to handle different errors and states.
+    // }
+    // delay(1); // [ms]
+
+  if (lightsActive && (millis() - lastLightChangeTime) > LIGHT_FRAME_LENGTH) {
+    Serial.println(F("Next light Frame"));
+    startNewLightFrame();
+  }
 
 }
