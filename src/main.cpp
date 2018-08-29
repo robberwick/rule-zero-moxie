@@ -9,9 +9,10 @@
 
 
 #define BUTTON_DEBOUNCE_DELAY   20   // [ms]
-#define NUMPIXELS 2
+#define NUMPIXELS 3
 #define DATA_PIN 3
-#define LIGHT_FRAME_LENGTH 1000 // [ms]
+#define LIGHT_FRAME_LENGTH 250 // [ms]
+#define MAX_LIGHT_FRAMES 2
 
 
 // pin definitions
@@ -29,14 +30,15 @@ Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, DATA_PIN, NEO_RGB + NEO_
 // state variables
 int selectedAudioFile = -1;
 bool lightsActive = false;
-unsigned long lastLightChangeTime = 0;
+long lightFrameStartTime = 0;
 
 unsigned long lastAudioDebounceTime = 0;
 unsigned long lastLightDebounceTime = 0;
 unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
 
+int currentLightFrame = 0;
+
 // MP3 player module
-// audio file loopin
 DFRobotDFPlayerMini myDFPlayer;
 void printDetail(uint8_t type, int value);
 SoftwareSerial Serial1(8, 9); // RX, TX
@@ -63,28 +65,11 @@ bool audioIsPlaying()
   return !digitalRead(AUDIO_BUSY_PIN);
 }
 
-void startNewLightFrame() {
-  lastLightChangeTime = millis();
-}
-
-void debouncedButtonReleasedCallback(uint8_t pinIn)
-{
-  // handle released state
-  Serial.print("LOW (pin: ");
-  Serial.print(pinIn);
-  Serial.println(")");
-
-
-  if (pinIn == LIGHT_TRIGGER_PIN) {
-    lightsActive = !lightsActive;
-    if (lightsActive) {
-      startNewLightFrame();
-
-    } else {
-      // clear it all
-    }
-    Serial.println(lightsActive ? F("LIGHTS!") : F("No lights.."));
-
+void getNewLightFrame(long currentTime) {
+  lightFrameStartTime = currentTime;
+  currentLightFrame++;
+  if (currentLightFrame == MAX_LIGHT_FRAMES) {
+    currentLightFrame = 0;
   }
 }
 
@@ -150,7 +135,34 @@ void printDetail(uint8_t type, int value){
 
 }
 
+void updateLights(long currentTime) {
+  if (currentTime > (lightFrameStartTime + LIGHT_FRAME_LENGTH)) {
+    getNewLightFrame(currentTime);
+  }
+
+  if (currentLightFrame == 0) {
+    pixels.setPixelColor(0, pixels.Color(0,0,255));
+    pixels.setPixelColor(1, pixels.Color(0,0,0));
+    pixels.setPixelColor(2, pixels.Color(255,165,0));
+  } else if (currentLightFrame == 1) {
+    pixels.setPixelColor(0, pixels.Color(0,0,0));
+    pixels.setPixelColor(1, pixels.Color(0,0,255));
+    pixels.setPixelColor(2, pixels.Color(255,165,0));
+  }
+  pixels.show();
+
+}
+
+void resetLights() {
+  currentLightFrame = 0;
+  pixels.clear();
+  pixels.show();
+}
+
 void setup() {
+  // initialise LEDS
+  pixels.begin(); // This initializes the NeoPixel library.
+  pixels.show();
 
   // init serial
   Serial1.begin(9600);
@@ -176,10 +188,6 @@ void setup() {
   pinMode(AUDIO_TRIGGER_PIN, INPUT_PULLUP);
   pinMode(LIGHT_TRIGGER_PIN, INPUT_PULLUP);
 
-  // initialise LEDS
-  pixels.begin(); // This initializes the NeoPixel library.
-  pixels.clear();
-  pixels.show();
 
 
 
@@ -253,15 +261,21 @@ void loop() {
         lightsActive = !lightsActive;
         Serial.println(lightsActive ? F("LIGHTS") : F("NO LIGHTS"));
         if (lightsActive) {
-          pixels.setPixelColor(0, pixels.Color(0,255,0)); // Moderately bright green color.
-          pixels.setPixelColor(1, pixels.Color(255,0,0));
+          // we've just activated the lights so initialise
+          // the light frame
+          getNewLightFrame(now);
         } else {
-          pixels.clear();
+          resetLights();
         }
-          pixels.show();
+
       }
     }
   }
   lastLightTriggerState = lightPinReading;
+
+  // if the lights are active, we should update them
+  if (lightsActive) {
+    updateLights(now);
+  }
 
 }
