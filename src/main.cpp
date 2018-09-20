@@ -2,39 +2,46 @@
 #include <SoftwareSerial.h>
 #include "InputDebounce.h"
 #include "DFRobotDFPlayerMini.h"
-#include <FastLED.h>
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+#include <avr/power.h>
+#endif
 
-#define BUTTON_DEBOUNCE_DELAY   20   // [ms]
-#define NUM_LEDS 3
+#define DEBUG
+#define BUTTON_DEBOUNCE_DELAY 20 // [ms]
+#define NUMPIXELS 8
 #define DATA_PIN 3
-#define LIGHT_FRAME_LENGTH 1000 // [ms]
-
-CRGBArray<NUM_LEDS> leds;
+#define LIGHT_FRAME_LENGTH 250 // [ms]
+#define MAX_LIGHT_FRAMES 2
 
 // pin definitions
-static const int pinLED = LED_BUILTIN; // 13
-static const int AUDIO_TRIGGER_PIN = 12;
-static const int AUDIO_BUSY_PIN = 9;
-static const int LIGHT_TRIGGER_PIN = 6;
+static const int AUDIO_TRIGGER_PIN = 11;
+static const int AUDIO_BUSY_PIN = 4;
+static const int LIGHT_TRIGGER_PIN = 12;
+int lastAudioTriggerState = HIGH;
+int audioTriggerState;
+int lastLightTriggerState = HIGH;
+int lightTriggerState;
 
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, DATA_PIN, NEO_RGB + NEO_KHZ800);
 
 // state variables
 int selectedAudioFile = -1;
 bool lightsActive = false;
-unsigned long lastLightChangeTime = 0;
+long lightFrameStartTime = 0;
 
-// Debounced Input Buttons
-static InputDebounce audioTriggerButton;
-static InputDebounce lightTriggerButton;
+unsigned long lastAudioDebounceTime = 0;
+unsigned long lastLightDebounceTime = 0;
+unsigned long debounceDelay = 50; // the debounce time; increase if the output flickers
+
+int currentLightFrame = 0;
 
 // MP3 player module
-// audio file loopin
 DFRobotDFPlayerMini myDFPlayer;
 void printDetail(uint8_t type, int value);
-SoftwareSerial Serial1(10, 11); // RX, TXg array. using selectedAudioFile as an index, this array
-// determines whether or not the file should be looped
+SoftwareSerial Serial1(8, 9); // RX, TX
 const int numAudioFiles = 3;
-const bool audioLoop [] = {true, false, true};
+const bool audioLoop[] = {true, false, true};
 
 long getRandomAudioFile()
 {
@@ -48,7 +55,7 @@ void setSelectedAudioFile(int audioFile)
 
 bool shouldAudioLoop()
 {
-  return (selectedAudioFile > 0) ? audioLoop[selectedAudioFile -1] : false;
+  return (selectedAudioFile > 0) ? audioLoop[selectedAudioFile - 1] : false;
 }
 
 bool audioIsPlaying()
@@ -56,193 +63,265 @@ bool audioIsPlaying()
   return !digitalRead(AUDIO_BUSY_PIN);
 }
 
-void startNewLightFrame() {
-  lastLightChangeTime = millis();
+void getNewLightFrame(long currentTime)
+{
+  lightFrameStartTime = currentTime;
+  currentLightFrame++;
+  if (currentLightFrame == MAX_LIGHT_FRAMES)
+  {
+    currentLightFrame = 0;
+  }
 }
 
-void debouncedButtonPressedCallback(uint8_t pinIn)
+void printDetail(uint8_t type, int value)
 {
-  // handle pressed state
-  digitalWrite(pinLED, HIGH); // turn the LED on
-  Serial.print("HIGH (pin: ");
-  Serial.print(pinIn);
-  Serial.println(")");
-}
-
-void debouncedButtonReleasedCallback(uint8_t pinIn)
-{
-  // handle released state
-  digitalWrite(pinLED, LOW); // turn the LED off
-  Serial.print("LOW (pin: ");
-  Serial.print(pinIn);
-  Serial.println(")");
-
-  if (pinIn == AUDIO_TRIGGER_PIN) {
-    // If audio should play, choose a random file and set it as selected
-    // else reset to -1
-    if (!audioIsPlaying())
+  // mark all these as debug prints for now
+  #ifdef DEBUG
+  switch (type)
+  {
+  case TimeOut:
+    Serial.println(F("Time Out!"));
+    break;
+  case WrongStack:
+    Serial.println(F("Stack Wrong!"));
+    break;
+  case DFPlayerCardInserted:
+    Serial.println(F("Card Inserted!"));
+    break;
+  case DFPlayerCardRemoved:
+    Serial.println(F("Card Removed!"));
+    break;
+  case DFPlayerCardOnline:
+    Serial.println(F("Card Online!"));
+    break;
+  case DFPlayerUSBInserted:
+    Serial.println("USB Inserted!");
+    break;
+  case DFPlayerUSBRemoved:
+    Serial.println("USB Removed!");
+    break;
+  case DFPlayerPlayFinished:
+    Serial.print(F("Number:"));
+    Serial.print(value);
+    Serial.println(F(" Play Finished!"));
+    break;
+  case DFPlayerError:
+    Serial.print(F("DFPlayerError:"));
+    switch (value)
     {
-      Serial.println("Playing audio");
-      setSelectedAudioFile(getRandomAudioFile());
-      Serial.print("Selected audio file: ");
-      Serial.println(selectedAudioFile);
-      Serial.print("Audio file loops? ");
-      Serial.println((shouldAudioLoop()) ? "Yes" : "No");
-      myDFPlayer.play(selectedAudioFile);
-    } else {
-      Serial.println("Stopping audio");
-      setSelectedAudioFile(0);
-      myDFPlayer.stop();
-    }
-  }
-
-  if (pinIn == LIGHT_TRIGGER_PIN) {
-    lightsActive = !lightsActive;
-    if (lightsActive) {
-      startNewLightFrame();
-    }
-    Serial.println(lightsActive ? F("LIGHTS!") : F("No lights.."));
-    leds[0] = CRGB::Red; 
-    FastLED.show();
-  }
-}
-
-void debouncedButtonPressedDurationCallback(uint8_t pinIn, unsigned long duration)
-{
-  // handle still pressed state
-  // Serial.print("HIGH (pin: ");
-  // Serial.print(pinIn);
-  // Serial.print(") still pressed, duration ");
-  // Serial.print(duration);
-  // Serial.println("ms");
-}
-
-void debouncedButtonReleasedDurationCallback(uint8_t pinIn, unsigned long duration)
-{
-  // handle released state
-  Serial.print("LOW (pin: ");
-  Serial.print(pinIn);
-  Serial.print("), duration ");
-  Serial.print(duration);
-  Serial.println("ms");
-}
-
-void printDetail(uint8_t type, int value){
-  switch (type) {
-    case TimeOut:
-      Serial.println(F("Time Out!"));
+    case Busy:
+      Serial.println(F("Card not found"));
       break;
-    case WrongStack:
-      Serial.println(F("Stack Wrong!"));
+    case Sleeping:
+      Serial.println(F("Sleeping"));
       break;
-    case DFPlayerCardInserted:
-      Serial.println(F("Card Inserted!"));
+    case SerialWrongStack:
+      Serial.println(F("Get Wrong Stack"));
       break;
-    case DFPlayerCardRemoved:
-      Serial.println(F("Card Removed!"));
+    case CheckSumNotMatch:
+      Serial.println(F("Check Sum Not Match"));
       break;
-    case DFPlayerCardOnline:
-      Serial.println(F("Card Online!"));
+    case FileIndexOut:
+      Serial.println(F("File Index Out of Bound"));
       break;
-    case DFPlayerUSBInserted:
-      Serial.println("USB Inserted!");
+    case FileMismatch:
+      Serial.println(F("Cannot Find File"));
       break;
-    case DFPlayerUSBRemoved:
-      Serial.println("USB Removed!");
-      break;
-    case DFPlayerPlayFinished:
-      Serial.print(F("Number:"));
-      Serial.print(value);
-      Serial.println(F(" Play Finished!"));
-      break;
-    case DFPlayerError:
-      Serial.print(F("DFPlayerError:"));
-      switch (value) {
-        case Busy:
-          Serial.println(F("Card not found"));
-          break;
-        case Sleeping:
-          Serial.println(F("Sleeping"));
-          break;
-        case SerialWrongStack:
-          Serial.println(F("Get Wrong Stack"));
-          break;
-        case CheckSumNotMatch:
-          Serial.println(F("Check Sum Not Match"));
-          break;
-        case FileIndexOut:
-          Serial.println(F("File Index Out of Bound"));
-          break;
-        case FileMismatch:
-          Serial.println(F("Cannot Find File"));
-          break;
-        case Advertise:
-          Serial.println(F("In Advertise"));
-          break;
-        default:
-          break;
-      }
+    case Advertise:
+      Serial.println(F("In Advertise"));
       break;
     default:
       break;
+    }
+    break;
+  default:
+    break;
   }
-  
+  #endif
 }
 
-void setup() {
-    // initialize digital pin as an output
-  pinMode(pinLED, OUTPUT);
+void updateLights(long currentTime)
+{
+  if (currentTime > (lightFrameStartTime + LIGHT_FRAME_LENGTH))
+  {
+    getNewLightFrame(currentTime);
+  }
+  if (currentLightFrame == 0)
+  {
+    for(int i = 0; i < 4; i++)
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 255));
+    }
+    for(int i = 5; i < 9; i++)
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+    }
+
+  }
+  else if (currentLightFrame == 1)
+  {
+    for(int i = 0; i < 4; i++)
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+    }
+    for(int i = 5; i < 9; i++)
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 255));
+    }
+
+    // // set all other neopixels orange
+    // pixels.setPixelColor(10, pixels.Color(255, 165, 0));
+  }
+  pixels.show();
+}
+
+void resetLights()
+{
+  currentLightFrame = 0;
+  pixels.clear();
+  pixels.show();
+}
+
+void setup()
+{
+  // initialise LEDS
+  pixels.begin(); // This initializes the NeoPixel library.
+  pixels.show();
 
   // init serial
-  // Serial1.begin(9600);
+  Serial1.begin(9600);
+
+  #ifdef DEBUG
   Serial.begin(115200);
-  
-  // Serial.println();
-  // Serial.println(F("Initializing DFPlayer ... (May take 3~5 seconds)"));
-  
-  //Use softwareSerial to communicate with mp3.
-  // if (!myDFPlayer.begin(Serial1)) {
-  //   Serial.println(F("Unable to begin:"));
-  //   Serial.println(F("1.Please recheck the connection!"));
-  //   Serial.println(F("2.Please insert the SD card!"));
-  //   while(true){
-  //     delay(0); // Code to compatible with ESP8266 watch dog.
-  //   }
-  // }
-  // Serial.println(F("DFPlayer Mini online."));
-  
-  // myDFPlayer.volume(30);  //Set volume value. From 0 to 30
+
+  Serial.println();
+  Serial.println(F("Initializing DFPlayer ... (May take 3~5 seconds)"));
+  #endif
+
+  // Use softwareSerial to communicate with mp3.
+  if (!myDFPlayer.begin(Serial1))
+  {
+    #ifdef DEBUG
+    Serial.println(F("Unable to begin:"));
+    Serial.println(F("1.Please recheck the connection!"));
+    Serial.println(F("2.Please insert the SD card!"));
+    #endif
+    while (true)
+    {
+      delay(0); // Code to compatible with ESP8266 watch dog.
+    }
+  }
+  #ifdef DEBUG
+  Serial.println(F("DFPlayer Mini online."));
+  #endif
+
+  myDFPlayer.volume(30); //Set volume value. From 0 to 30
   // myDFPlayer.play(1);  //Play the first mp3
 
-  // register callback functions (shared, used by all buttons)
-  audioTriggerButton.registerCallbacks(debouncedButtonPressedCallback, debouncedButtonReleasedCallback, debouncedButtonPressedDurationCallback, debouncedButtonReleasedDurationCallback);
-  lightTriggerButton.registerCallbacks(debouncedButtonPressedCallback, debouncedButtonReleasedCallback, debouncedButtonPressedDurationCallback, debouncedButtonReleasedDurationCallback);
-
-  // setup input buttons (debounced)
-  audioTriggerButton.setup(AUDIO_TRIGGER_PIN, BUTTON_DEBOUNCE_DELAY);
-  lightTriggerButton.setup(LIGHT_TRIGGER_PIN, BUTTON_DEBOUNCE_DELAY);
-
-  // initialise LEDS
-  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
-  FastLED.clear();
-
+  pinMode(AUDIO_TRIGGER_PIN, INPUT_PULLUP);
+  pinMode(LIGHT_TRIGGER_PIN, INPUT_PULLUP);
 }
 
-void loop() {
-    unsigned long now = millis();
+void loop()
+{
+  unsigned long now = millis();
 
-    // poll button state
-    audioTriggerButton.process(now);
-    lightTriggerButton.process(now);
+  // read the state of the audio switch into a local variable:
+  int audioPinReading = digitalRead(AUDIO_TRIGGER_PIN);
 
-    // if (myDFPlayer.available()) {
-    //   printDetail(myDFPlayer.readType(), myDFPlayer.read()); //Print the detail message from DFPlayer to handle different errors and states.
-    // }
-    // delay(1); // [ms]
-
-  if (lightsActive && (millis() - lastLightChangeTime) > LIGHT_FRAME_LENGTH) {
-    Serial.println(F("Next light Frame"));
-    startNewLightFrame();
+  // If the audio switch changed, due to noise or pressing:
+  if (audioPinReading != lastAudioTriggerState)
+  {
+    // reset the debouncing timer
+    lastAudioDebounceTime = now;
   }
 
+  if ((now - lastAudioDebounceTime) > debounceDelay)
+  {
+    // whatever the reading is at, it's been there for longer than the debounce
+    // delay, so take it as the actual current state:
+
+    // if the button state has changed:
+    if (audioPinReading != audioTriggerState)
+    {
+      audioTriggerState = audioPinReading;
+
+      // If audioTriggerState is LOW, Play or stop audio as required
+      if (audioTriggerState == LOW)
+      {
+        if (!audioIsPlaying())
+        {
+          setSelectedAudioFile(getRandomAudioFile());
+          myDFPlayer.play(selectedAudioFile);
+          #ifdef DEBUG
+          Serial.println("Playing audio");
+          Serial.print("Selected audio file: ");
+          Serial.println(selectedAudioFile);
+          Serial.print("Audio file loops? ");
+          Serial.println((shouldAudioLoop()) ? "Yes" : "No");
+          #endif
+        }
+        else
+        {
+          setSelectedAudioFile(0);
+          myDFPlayer.stop();
+          #ifdef DEBUG
+          Serial.println("Stopping audio");
+          #endif
+        }
+      }
+    }
+  }
+  lastAudioTriggerState = audioPinReading;
+  if (myDFPlayer.available())
+  {
+    printDetail(myDFPlayer.readType(), myDFPlayer.read()); //Print the detail message from DFPlayer to handle different errors and states.
+  }
+
+  int lightPinReading = digitalRead(LIGHT_TRIGGER_PIN);
+
+  // If the audio switch changed, due to noise or pressing:
+  if (lightPinReading != lastLightTriggerState)
+  {
+    // reset the debouncing timer
+    lastLightDebounceTime = now;
+  }
+
+  if ((now - lastLightDebounceTime) > debounceDelay)
+  {
+    // whatever the reading is at, it's been there for longer than the debounce
+    // delay, so take it as the actual current state:
+
+    // if the button state has changed:
+    if (lightPinReading != lightTriggerState)
+    {
+      lightTriggerState = lightPinReading;
+
+      // only toggle the LED if the new button state is HIGH
+      if (lightTriggerState == LOW)
+      {
+        lightsActive = !lightsActive;
+        #ifdef DEBUG
+        Serial.println(lightsActive ? F("LIGHTS") : F("NO LIGHTS"));
+        #endif
+        if (lightsActive)
+        {
+          // we've just activated the lights so initialise
+          // the light frame
+          getNewLightFrame(now);
+        }
+        else
+        {
+          resetLights();
+        }
+      }
+    }
+  }
+  lastLightTriggerState = lightPinReading;
+
+  // if the lights are active, we should update them
+  if (lightsActive)
+  {
+    updateLights(now);
+  }
 }
