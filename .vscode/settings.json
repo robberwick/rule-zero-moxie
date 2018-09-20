@@ -1,0 +1,6 @@
+{
+    "terminal.integrated.env.linux": {
+        "PATH": "/home/robberwick/.platformio/penv/bin:/home/robberwick/.platformio/penv:/home/robberwick/.pyenv/plugins/pyenv-virtualenv/shims:/home/robberwick/.pyenv/shims:/home/robberwick/.pyenv/bin:/home/robberwick/.pyenv/shims:/home/robberwick/.nvm/versions/node/v10.9.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/home/robberwick/.pyenv/bin",
+        "PLATFORMIO_CALLER": "vscode"
+    }
+}
