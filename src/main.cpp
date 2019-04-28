@@ -10,20 +10,20 @@
 #define DEBUG
 #define BUTTON_DEBOUNCE_DELAY 20 // [ms]
 #define NUMPIXELS 8
-#define DATA_PIN 3
+#define NEOPIXEL_DATA_PIN 12
 #define LIGHT_FRAME_LENGTH 250 // [ms]
 #define MAX_LIGHT_FRAMES 2
 
 // pin definitions
-static const int AUDIO_TRIGGER_PIN = 11;
-static const int AUDIO_BUSY_PIN = 4;
-static const int LIGHT_TRIGGER_PIN = 12;
+static const int AUDIO_TRIGGER_PIN = 2;
+static const int AUDIO_BUSY_PIN = 7;
+static const int LIGHT_TRIGGER_PIN = 3;
 int lastAudioTriggerState = HIGH;
 int audioTriggerState;
 int lastLightTriggerState = HIGH;
 int lightTriggerState;
 
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, DATA_PIN, NEO_RGB + NEO_KHZ800);
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, NEOPIXEL_DATA_PIN, NEO_RGB + NEO_KHZ800);
 
 // state variables
 int selectedAudioFile = -1;
@@ -190,12 +190,13 @@ void setup()
 
   // init serial
   Serial1.begin(9600);
-
-  #ifdef DEBUG
   Serial.begin(115200);
 
+  #ifdef DEBUG
   Serial.println();
   Serial.println(F("Initializing DFPlayer ... (May take 3~5 seconds)"));
+  #else
+  Serial.println(F("Debug not enabled"));
   #endif
 
   // Use softwareSerial to communicate with mp3.
@@ -216,7 +217,7 @@ void setup()
   #endif
 
   myDFPlayer.volume(30); //Set volume value. From 0 to 30
-  // myDFPlayer.play(1);  //Play the first mp3
+  myDFPlayer.play(1);  //Play the first mp3
 
   pinMode(AUDIO_TRIGGER_PIN, INPUT_PULLUP);
   pinMode(LIGHT_TRIGGER_PIN, INPUT_PULLUP);
