@@ -23,7 +23,7 @@ int audioTriggerState;
 int lastLightTriggerState = HIGH;
 int lightTriggerState;
 
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, NEOPIXEL_DATA_PIN, NEO_WRGB + NEO_KHZ800);
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, NEOPIXEL_DATA_PIN, NEO_RBWG + NEO_KHZ800);
 static const int lightbar_1_start = 0;
 static const int lightbar_1_end = 7;
 static const int lightbar_2_start = 8;
@@ -154,11 +154,11 @@ void updateLights(long currentTime)
   {
     for (int i = 0; i < 4; i++)
     {
-      pixels.setPixelColor(i, pixels.Color(0, 0, 255, 255));
+      pixels.setPixelColor(i, pixels.Color(0, 255, 0, 255));
     }
     for (int i = 8; i < 12; i++)
     {
-      pixels.setPixelColor(i, pixels.Color(0, 0, 255, 255));
+      pixels.setPixelColor(i, pixels.Color(0, 255, 0, 255));
     }
     for (int i = 4; i < 8; i++)
     {
@@ -181,11 +181,11 @@ void updateLights(long currentTime)
     }
     for (int i = 4; i < 8; i++)
     {
-      pixels.setPixelColor(i, pixels.Color(0, 0, 255, 255));
+      pixels.setPixelColor(i, pixels.Color(0, 255, 0, 255));
     }
     for (int i = 12; i < 16; i++)
     {
-      pixels.setPixelColor(i, pixels.Color(0, 0, 255, 255));
+      pixels.setPixelColor(i, pixels.Color(0, 255, 0, 255));
     }
 
     // // set all other neopixels orange
