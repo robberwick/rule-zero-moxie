@@ -9,7 +9,7 @@
 
 #define DEBUG
 #define BUTTON_DEBOUNCE_DELAY 20 // [ms]
-#define NUMPIXELS 8
+#define NUMPIXELS 16
 #define NEOPIXEL_DATA_PIN 12
 #define LIGHT_FRAME_LENGTH 250 // [ms]
 #define MAX_LIGHT_FRAMES 2
@@ -23,7 +23,11 @@ int audioTriggerState;
 int lastLightTriggerState = HIGH;
 int lightTriggerState;
 
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, NEOPIXEL_DATA_PIN, NEO_RGB + NEO_KHZ800);
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, NEOPIXEL_DATA_PIN, NEO_WRGB + NEO_KHZ800);
+static const int lightbar_1_start = 0;
+static const int lightbar_1_end = 7;
+static const int lightbar_2_start = 8;
+static const int lightbar_2_end = 15;
 
 // state variables
 int selectedAudioFile = -1;
@@ -75,8 +79,8 @@ void getNewLightFrame(long currentTime)
 
 void printDetail(uint8_t type, int value)
 {
-  // mark all these as debug prints for now
-  #ifdef DEBUG
+// mark all these as debug prints for now
+#ifdef DEBUG
   switch (type)
   {
   case TimeOut:
@@ -137,7 +141,7 @@ void printDetail(uint8_t type, int value)
   default:
     break;
   }
-  #endif
+#endif
 }
 
 void updateLights(long currentTime)
@@ -148,25 +152,40 @@ void updateLights(long currentTime)
   }
   if (currentLightFrame == 0)
   {
-    for(int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++)
     {
-      pixels.setPixelColor(i, pixels.Color(0, 0, 255));
+      pixels.setPixelColor(i, pixels.Color(0, 0, 255, 255));
     }
-    for(int i = 5; i < 9; i++)
+    for (int i = 8; i < 12; i++)
     {
-      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+      pixels.setPixelColor(i, pixels.Color(0, 0, 255, 255));
     }
-
+    for (int i = 4; i < 8; i++)
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0, 0));
+    }
+    for (int i = 12; i < 16; i++)
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0, 0));
+    }
   }
   else if (currentLightFrame == 1)
   {
-    for(int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++)
     {
-      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0, 0));
     }
-    for(int i = 5; i < 9; i++)
+    for (int i = 8; i < 12; i++)
     {
-      pixels.setPixelColor(i, pixels.Color(0, 0, 255));
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0, 0));
+    }
+    for (int i = 4; i < 8; i++)
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 255, 255));
+    }
+    for (int i = 12; i < 16; i++)
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 255, 255));
     }
 
     // // set all other neopixels orange
@@ -192,32 +211,32 @@ void setup()
   Serial1.begin(9600);
   Serial.begin(115200);
 
-  #ifdef DEBUG
+#ifdef DEBUG
   Serial.println();
   Serial.println(F("Initializing DFPlayer ... (May take 3~5 seconds)"));
-  #else
+#else
   Serial.println(F("Debug not enabled"));
-  #endif
+#endif
 
   // Use softwareSerial to communicate with mp3.
   if (!myDFPlayer.begin(Serial1))
   {
-    #ifdef DEBUG
+#ifdef DEBUG
     Serial.println(F("Unable to begin:"));
     Serial.println(F("1.Please recheck the connection!"));
     Serial.println(F("2.Please insert the SD card!"));
-    #endif
+#endif
     while (true)
     {
       delay(0); // Code to compatible with ESP8266 watch dog.
     }
   }
-  #ifdef DEBUG
+#ifdef DEBUG
   Serial.println(F("DFPlayer Mini online."));
-  #endif
+#endif
 
   myDFPlayer.volume(30); //Set volume value. From 0 to 30
-  myDFPlayer.play(1);  //Play the first mp3
+  myDFPlayer.play(1);    //Play the first mp3
 
   pinMode(AUDIO_TRIGGER_PIN, INPUT_PULLUP);
   pinMode(LIGHT_TRIGGER_PIN, INPUT_PULLUP);
@@ -254,21 +273,21 @@ void loop()
         {
           setSelectedAudioFile(getRandomAudioFile());
           myDFPlayer.play(selectedAudioFile);
-          #ifdef DEBUG
+#ifdef DEBUG
           Serial.println("Playing audio");
           Serial.print("Selected audio file: ");
           Serial.println(selectedAudioFile);
           Serial.print("Audio file loops? ");
           Serial.println((shouldAudioLoop()) ? "Yes" : "No");
-          #endif
+#endif
         }
         else
         {
           setSelectedAudioFile(0);
           myDFPlayer.stop();
-          #ifdef DEBUG
+#ifdef DEBUG
           Serial.println("Stopping audio");
-          #endif
+#endif
         }
       }
     }
@@ -302,9 +321,9 @@ void loop()
       if (lightTriggerState == LOW)
       {
         lightsActive = !lightsActive;
-        #ifdef DEBUG
+#ifdef DEBUG
         Serial.println(lightsActive ? F("LIGHTS") : F("NO LIGHTS"));
-        #endif
+#endif
         if (lightsActive)
         {
           // we've just activated the lights so initialise
